@@ -24,6 +24,8 @@
 #include <string.h>
 
 #include <fprint.h>
+#include <time.h>
+#include <stdlib.h>
 
 #define PAM_SM_AUTH
 #include <security/pam_modules.h>
@@ -152,12 +154,26 @@ static struct fp_print_data **find_dev_and_prints(struct fp_dscv_dev **ddevs,
 static int do_identify(pam_handle_t *pamh, struct fp_dev *dev,
 	struct fp_print_data **gallery, enum fp_finger *fingers)
 {
-	int max_tries = 5;
+	int max_tries = 2;
 	size_t offset;
 	const char *driver_name = fp_driver_get_full_name(fp_dev_get_driver(dev));
-	const char *fstr = fingerstr(fingers[0]);
-	
+	int entropy = 0;
+	int max_entropy = 10;
+	int i = 0;
+	for (i = 0; i < 10; i++) {
+		const char *tmp = fingerstr(fingers[i]);
+		if ( tmp == "UNKNOWN" ) {
+			max_entropy--;
+		}
+	}
 	do {
+		if ( max_entropy > 1 ) {
+			srand( time(NULL) );
+			entropy = rand() % max_entropy;
+		}
+
+		const char *fstr = fingerstr(fingers[entropy]);
+
 		int r;
 		char msg[128];
 
@@ -173,7 +189,7 @@ static int do_identify(pam_handle_t *pamh, struct fp_dev *dev,
 		    snprintf(msg, sizeof(msg), "Scan %s finger on %s", fstr, driver_name);
 		    msg[sizeof(msg) - 1] = 0;
 		    send_info_msg(pamh, msg);
-		    r = fp_verify_finger(dev, gallery[0]);
+		    r = fp_verify_finger(dev, gallery[entropy]);
 		}
 		if (r < 0) {
 			snprintf(msg, sizeof(msg), "Fingerprint verification error %d", r);
